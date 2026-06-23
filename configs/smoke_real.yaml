@@ -1,0 +1,39 @@
+# Small real-data smoke test config (wikitext-2, tiny model, ~60 steps).
+# Used for quick verification of the pipeline end-to-end.
+data:
+  dataset: wikitext-2-raw-v1
+  cache_dir: data/cache
+  seq_len: 256
+
+model:
+  variant: matmla
+  d_model: 192
+  n_q_heads: 12
+  head_dim: 16
+  c_kv: 24
+  c_q: 24
+  r_rope: 8
+  n_layers: 4
+  d_intermediate: 384
+  rope_base: 10000.0
+  tie_embeddings: true
+  granularities:
+    q_heads: [3, 6, 9, 12]
+    ffn_ratio: [1.0]
+
+train:
+  batch_size: 16
+  eval_batch_size: 16
+  grad_accum: 1
+  lr: 5.0e-4
+  warmup_steps: 20
+  max_steps: 60
+  weight_decay: 0.1
+  grad_clip: 1.0
+  amp: false
+  log_interval: 10
+  eval_interval: 30
+  eval_max_batches: 8
+  seed: 42
+  sample:
+    full_prob: 0.25

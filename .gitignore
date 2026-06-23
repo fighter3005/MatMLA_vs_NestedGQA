@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Hugging Face cache
+.cache/
+**/.cache/huggingface/
+**/.cache/hf/
+
+# Data
+/data/

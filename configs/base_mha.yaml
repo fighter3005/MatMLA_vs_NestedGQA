@@ -1,0 +1,37 @@
+# Baseline MHA: standard multi-head attention, no slicing.
+# ~50M params at this size.
+data:
+  dataset: wikitext-103-raw-v1
+  cache_dir: data/cache
+  seq_len: 512
+
+model:
+  variant: baseline_mha
+  d_model: 384
+  n_heads: 12
+  head_dim: 32        # 12 * 32 = 384; Q,K,V,O each 384x384
+  n_layers: 12
+  d_intermediate: 1536
+  rope_base: 10000.0
+  tie_embeddings: true
+  granularities:
+    q_heads: []      # no nested sub-models
+    ffn_ratio: []
+
+train:
+  batch_size: 8
+  eval_batch_size: 4
+  grad_accum: 4
+  lr: 3.0e-4
+  warmup_steps: 200
+  max_steps: 20000
+  weight_decay: 0.1
+  grad_clip: 1.0
+  amp: false
+  log_interval: 50
+  eval_interval: 500
+  eval_max_batches: 16
+  eval_loss_chunk: 2
+  seed: 1234
+  sample:
+    full_prob: 1.0    # baseline has no granularities; sample_submodel falls back to full

@@ -1,0 +1,45 @@
+# MatMLA: compress-then-nested-decompress attention, separate RoPE-K,
+# nested FFN. Residual stream d_model is never sliced.
+# Compression is full; decompression output is sliced per sub-model.
+#
+# `n_kv_heads` is intentionally NOT in this config: the MatMLA paper has
+# `n_kv_heads == n_q_heads` after decompression (MHA-on-decompressed-side).
+# The cache stores `(C_KV, K_R)` per token regardless of sub-model.
+data:
+  dataset: wikitext-103-raw-v1
+  cache_dir: data/cache
+  seq_len: 512
+
+model:
+  variant: matmla
+  d_model: 384
+  n_q_heads: 12
+  head_dim: 32
+  c_kv: 96            # compressed KV latent dim
+  c_q: 96             # compressed Q latent dim
+  r_rope: 16          # RoPE-K separate path dim
+  n_layers: 12
+  d_intermediate: 1536
+  rope_base: 10000.0
+  tie_embeddings: true
+  granularities:
+    q_heads: [3, 6, 9, 12]
+    ffn_ratio: [0.25, 0.5, 0,75, 1.0]
+
+train:
+  batch_size: 8
+  eval_batch_size: 4
+  grad_accum: 4
+  lr: 3.0e-4
+  warmup_steps: 200
+  max_steps: 20000
+  weight_decay: 0.1
+  grad_clip: 1.0
+  amp: false
+  log_interval: 50
+  eval_interval: 1000
+  eval_max_batches: 16
+  eval_loss_chunk: 2
+  seed: 1234
+  sample:
+    full_prob: 0.25    # P(train on the full sub-model) per step

@@ -1,0 +1,18 @@
+[project]
+name = "matmla-vs-nestedgqa"
+version = "0.1.0"
+description = "From-scratch small LM training pipeline with nested (MatMLA-style) sub-models."
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.50",
+    "datasets>=3.0",
+    "pyyaml>=6.0",
+    "numpy>=2.0",
+    "tiktoken>=0.7",
+    "wandb>=0.17",
+    "tensorboard>=2.15",
+]
+
+[tool.uv]
+package = false
