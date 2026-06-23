@@ -208,16 +208,22 @@ def main() -> None:
         save_dir=args.save_dir,
     )
 
-    # ---- Resume from checkpoint if provided ----
+    # ---- Resume from checkpoint if provided, or auto-resume from final.pt in save_dir ----
     start_step = 0
-    if args.ckpt and Path(args.ckpt).exists():
-        ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
+    ckpt_path = Path(args.ckpt) if args.ckpt else (save_dir / "final.pt")
+    if ckpt_path.exists():
+        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["model"])
         if "optimizer" in ckpt and not args.eval_only:
             opt.load_state_dict(ckpt["optimizer"])
         if "step" in ckpt:
             start_step = int(ckpt["step"])
-        print(f"[ckpt] resumed from {args.ckpt} at step {start_step}")
+        print(f"[ckpt] resumed from {ckpt_path} at step {start_step}")
+    else:
+        if args.ckpt:
+            print(f"[ckpt] {args.ckpt} not found, starting from scratch")
+        else:
+            print(f"[ckpt] no final.pt in {save_dir}, starting from scratch")
 
     if args.eval_only:
         submodels = enumerate_submodels(dict(cfg))
