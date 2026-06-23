@@ -1,18 +1,18 @@
 #!/bin/bash
 #SBATCH --job-name=matmla-train
-#SBATCH --partition=gpu
+#SBATCH --partition=debug
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=08:00:00
+#SBATCH --time=04:00:00
 #SBATCH --mem=32G
 #SBATCH --output=slurm/logs/%x-%j.out
 #SBATCH --error=slurm/logs/%x-%j.err
 #SBATCH --export=NONE
 
 # Adjust the partition / gres line to match the cluster you're on:
-#   TUHH NCPS: usually --partition=gpu   --gres=gpu:1
+#   TUHH NCPS: usually --partition=debug   --gres=gpu:1
 #   HLRN:      usually --partition=ml    --gres=gpu:a100:1 (etc.)
 # You may also need to set --account=<your_account> on shared clusters.
 
@@ -25,9 +25,6 @@ set -euo pipefail
 
 # Pin the working dir to the repo root no matter where sbatch was invoked from.
 cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/..}"
-
-# Activate the uv-managed virtual environment.
-source .venv/bin/activate
 
 # Make local src and data importable without `pip install -e`.
 export PYTHONPATH="${PYTHONPATH:-}:${PWD}"
