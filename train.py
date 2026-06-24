@@ -306,8 +306,9 @@ def main() -> None:
 
         if (step + 1) % log_interval == 0 or step == 0:
             elapsed = time.time() - t0
+            avg_train_loss = loss_accum / grad_accum
             metrics = {
-                "train/loss": loss_accum,
+                "train/loss": avg_train_loss,
                 "train/lr": opt.param_groups[0]["lr"],
                 "train/tokens_seen": (step + 1) * cfg.train.batch_size * grad_accum * cfg.data.seq_len,
                 "train/sec_per_step": elapsed / max(1, step + 1 - start_step),
@@ -317,7 +318,7 @@ def main() -> None:
             }
             logger.log(metrics, step=step + 1)
             print(
-                f"[step {step+1:6d}] loss={loss_accum:.4f} "
+                f"[step {step+1:6d}] loss={avg_train_loss:.4f} "
                 f"lr={opt.param_groups[0]['lr']:.2e} "
                 f"spec={train_spec.tag} "
                 f"({elapsed:.0f}s, {metrics['train/sec_per_step']:.2f}s/step)"
