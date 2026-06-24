@@ -214,6 +214,7 @@ def build_matmla(
     r_rope: int,
     rope_base: float = 10000.0,
     tie_embeddings: bool = True,
+    dropout: float = 0.0,
 ) -> TransformerLM:
     """Build a MatMLA LM.
 
@@ -232,7 +233,7 @@ def build_matmla(
             rope_base=rope_base,
         )
         ffn = _NestedFFN(d_model, d_intermediate)
-        block = TransformerBlock(d_model, attn, ffn)
+        block = TransformerBlock(d_model, attn, ffn, residual_dropout=dropout)
 
         original_forward = block.forward
 

@@ -47,14 +47,17 @@ def tokenize_and_pack(
     texts: List[str],
     cache_path: Path,
     eot_token: int,
+    max_vocab_size: int | None = None,
 ) -> TokenizedSplit:
-    """Tokenize a list of strings, concatenate, and dump as int32 memmap."""
+    """Tokenize a list of strings, concatenate, and dump as int32 memmap.
+
+    If ``max_vocab_size`` is set, token IDs are clipped to
+    ``[0, max_vocab_size - 1]`` so the embedding table can be smaller.
+    The EOT token is also remapped into the valid range.
+    """
     cache_path = Path(cache_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     if cache_path.exists():
-        # Trust the file; user can delete to rebuild.
-        n = int(np.fromfile(cache_path, dtype=np.int64, count=1)[0]) if False else None
-        # Compute n_tokens from file size instead.
         n_tokens = cache_path.stat().st_size // 4  # int32
         return TokenizedSplit(path=cache_path, n_tokens=n_tokens)
 
@@ -62,8 +65,12 @@ def tokenize_and_pack(
     all_ids: List[int] = []
     for t in texts:
         ids = enc.encode_ordinary(t)
-        ids.append(eot_token)
+        if max_vocab_size is not None:
+            ids = [i % max_vocab_size for i in ids]
         all_ids.extend(ids)
+        # Append EOT (also clipped to valid range).
+        eot = eot_token % max_vocab_size if max_vocab_size is not None else eot_token
+        all_ids.append(eot)
     arr = np.asarray(all_ids, dtype=np.int32)
     arr.tofile(cache_path)
     return TokenizedSplit(path=cache_path, n_tokens=len(arr))
@@ -73,6 +80,7 @@ def load_wikitext(
     *,
     name: str = "wikitext-103-raw-v1",
     cache_dir: str = "data/cache",
+    max_vocab_size: int | None = None,
 ) -> dict:
     """Load wikitext-{2,103}-raw-v1 via `datasets` and tokenize into memmaps.
 
@@ -87,11 +95,17 @@ def load_wikitext(
     enc = _get_tokenizer()
     eot = enc.eot_token
 
+    # Include max_vocab_size in cache key so different vocab sizes get
+    # separate tokenized files.
+    vtag = f"_v{max_vocab_size}" if max_vocab_size is not None else ""
+
     splits = {}
     for split_name in ["train", "validation", "test"]:
         texts = raw[split_name]["text"]
-        out_path = cache_dir / f"{name.replace('/', '_')}__{split_name}.bin"
-        splits[split_name] = tokenize_and_pack(texts, out_path, eot)
+        out_path = cache_dir / f"{name.replace('/', '_')}__{split_name}{vtag}.bin"
+        splits[split_name] = tokenize_and_pack(
+            texts, out_path, eot, max_vocab_size=max_vocab_size,
+        )
     return splits
 
 
@@ -144,6 +158,9 @@ def make_dataloaders(
     }
 
 
-def vocab_size_gpt2() -> int:
-    """Return GPT-2 vocab size (50257)."""
-    return 50257
+def vocab_size_gpt2(max_vocab_size: int | None = None) -> int:
+    """Return GPT-2 vocab size, optionally clipped to max_vocab_size."""
+    full = 50257
+    if max_vocab_size is not None:
+        return min(full, max_vocab_size)
+    return full

@@ -23,12 +23,14 @@ class TransformerBlock(nn.Module):
         d_model: int,
         attn: nn.Module,
         ffn: nn.Module,
+        residual_dropout: float = 0.0,
     ):
         super().__init__()
         self.attn = attn
         self.ffn = ffn
         self.norm1 = DynamicRMSNorm(d_model)
         self.norm2 = DynamicRMSNorm(d_model)
+        self.residual_dropout = nn.Dropout(residual_dropout) if residual_dropout > 0 else nn.Identity()
 
     def forward(
         self,
@@ -38,8 +40,8 @@ class TransformerBlock(nn.Module):
     ) -> torch.Tensor:
         attn_kwargs = attn_kwargs or {}
         ffn_kwargs = ffn_kwargs or {}
-        x = x + self.attn(self.norm1(x), **attn_kwargs)
-        x = x + self.ffn(self.norm2(x), **ffn_kwargs)
+        x = x + self.residual_dropout(self.attn(self.norm1(x), **attn_kwargs))
+        x = x + self.residual_dropout(self.ffn(self.norm2(x), **ffn_kwargs))
         return x
 
 

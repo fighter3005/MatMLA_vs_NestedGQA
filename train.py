@@ -149,7 +149,7 @@ def main() -> None:
         cfg["train"]["max_steps"] = int(args.max_steps)
     if args.seed is not None:
         cfg["train"]["seed"] = int(args.seed)
-    cfg["data"]["vocab_size"] = vocab_size_gpt2()
+    cfg["data"]["vocab_size"] = vocab_size_gpt2(cfg.data.get("max_vocab_size"))
 
     run_name = cfg.train.get("name") or Path(args.config).stem
     save_dir = Path(args.save_dir) / run_name
@@ -164,6 +164,7 @@ def main() -> None:
     splits = load_wikitext(
         name=cfg.data.get("dataset", "wikitext-103-raw-v1"),
         cache_dir=cfg.data.get("cache_dir", "data/cache"),
+        max_vocab_size=cfg.data.get("max_vocab_size"),
     )
     print(
         f"[data] tokens: train={splits['train'].n_tokens:,}, "
@@ -194,7 +195,7 @@ def main() -> None:
         opt,
         warmup_steps=cfg.train.get("warmup_steps", 200),
         max_steps=cfg.train.max_steps,
-        min_lr_ratio=cfg.train.get("min_lr_ratio", 0.1),
+        min_lr_ratio=cfg.train.get("min_lr_ratio", 0.0),
     )
     scaler = torch.amp.GradScaler(
         device.type, enabled=bool(cfg.train.get("amp", False))

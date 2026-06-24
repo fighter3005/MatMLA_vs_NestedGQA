@@ -50,6 +50,7 @@ def build_model(cfg: dict) -> nn.Module:
         d_intermediate=m["d_intermediate"],
         rope_base=m.get("rope_base", 10000.0),
         tie_embeddings=m.get("tie_embeddings", True),
+        dropout=m.get("dropout", 0.0),
     )
 
     if variant == "baseline_mha":

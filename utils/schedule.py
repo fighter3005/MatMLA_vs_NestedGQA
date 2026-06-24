@@ -12,7 +12,7 @@ class CosineWarmupScheduler:
         *,
         warmup_steps: int,
         max_steps: int,
-        min_lr_ratio: float = 0.1,
+        min_lr_ratio: float = 0.0,
     ):
         self.optimizer = optimizer
         self.warmup_steps = max(0, int(warmup_steps))

@@ -154,12 +154,13 @@ def build_nested_gqa(
     d_intermediate: int,
     rope_base: float = 10000.0,
     tie_embeddings: bool = True,
+    dropout: float = 0.0,
 ) -> TransformerLM:
     def make_block(_idx: int) -> TransformerBlock:
         attn = NestedGQAAttention(d_model, n_q_heads, n_kv_heads, head_dim, rope_base=rope_base)
         ffn = _NestedFFN(d_model, d_intermediate)
 
-        block = TransformerBlock(d_model, attn, ffn)
+        block = TransformerBlock(d_model, attn, ffn, residual_dropout=dropout)
 
         # Wrap block.forward to translate top-level kwargs.
         original_forward = block.forward

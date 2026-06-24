@@ -38,11 +38,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
-    cfg["data"]["vocab_size"] = vocab_size_gpt2()
+    cfg["data"]["vocab_size"] = vocab_size_gpt2(cfg.data.get("max_vocab_size"))
 
     splits = load_wikitext(
         name=cfg.data.get("dataset", "wikitext-103-raw-v1"),
         cache_dir=cfg.data.get("cache_dir", "data/cache"),
+        max_vocab_size=cfg.data.get("max_vocab_size"),
     )
     loaders = make_dataloaders(
         splits,

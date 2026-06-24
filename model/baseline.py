@@ -133,11 +133,12 @@ def build_baseline_mha(
     rope_base: float = 10000.0,
     qk_norm: bool = False,
     tie_embeddings: bool = True,
+    dropout: float = 0.0,
 ) -> TransformerLM:
     def make_block(_idx: int) -> TransformerBlock:
         attn = MHAAttention(d_model, n_heads, head_dim, rope_base=rope_base, qk_norm=qk_norm)
         ffn = SwiGLU(d_model, d_intermediate)
-        block = TransformerBlock(d_model, attn, ffn)
+        block = TransformerBlock(d_model, attn, ffn, residual_dropout=dropout)
 
         # Wrap block.forward to swallow sub-model kwargs (baseline ignores them).
         original_forward = block.forward
@@ -162,11 +163,12 @@ def build_baseline_gqa(
     rope_base: float = 10000.0,
     qk_norm: bool = False,
     tie_embeddings: bool = True,
+    dropout: float = 0.0,
 ) -> TransformerLM:
     def make_block(_idx: int) -> TransformerBlock:
         attn = GQAAttention(d_model, n_q_heads, n_kv_heads, head_dim, rope_base=rope_base, qk_norm=qk_norm)
         ffn = SwiGLU(d_model, d_intermediate)
-        block = TransformerBlock(d_model, attn, ffn)
+        block = TransformerBlock(d_model, attn, ffn, residual_dropout=dropout)
 
         original_forward = block.forward
 
