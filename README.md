@@ -7,6 +7,12 @@ A from-scratch small-LM training pipeline that supports:
   Uniform per-KV-group slicing: e.g. 12 Q / 3 KV groups admits `{3, 6, 9, 12}` Q heads.
   K and V stay at full size (the cache layout doesn't change with the Q-head budget).
   FFN intermediate is optionally sliced along an independent axis.
+- **Nested GQA + MoE** (`gqa_moe_nested`): same GQA backbone and prefix head-slicing,
+  but each Q **and** O head is a per-head Mixture-of-Experts (`n_experts` matrices +
+  a top-k router). K/V stay dense per KV group, so the KV cache is unchanged. Adds a
+  second slicing axis — `q_topk` (experts routed per head) — orthogonal to head count
+  and FFN width. A Switch-style load-balancing aux loss keeps experts balanced.
+  At `n_experts=1, moe_k=1` it is numerically identical to plain Nested GQA.
 - **MatMLA**: latent attention with compressed KV cache and a separate small RoPE-K
   path. **MHA-on-decompressed-side** (paper-faithful: the paper has `n_kv == n_q`
   after decompression, not GQA). FFN intermediate is sliced along the same axis.
@@ -33,6 +39,9 @@ python train.py -config configs/matmla.yaml -log both -name matmla
 
 # Nested GQA
 python train.py -config configs/nested_gqa.yaml -log both -name nested_gqa
+
+# Nested GQA + per-head MoE on Q/O (head count x top-k x FFN Pareto grid)
+python train.py -config configs/gqa_moe_nested.yaml -log both -name gqa_moe_nested
 
 # Baselines (no slicing)
 python train.py -config configs/base_mha.yaml -log tb -name mha
@@ -106,6 +115,23 @@ utils/                  logging (wandb|tb|both|none), schedule, init, config
   of `o_proj`. K and V stay full; only `repeat_kv`'s per-group factor changes.
 - Valid `active_q_heads` are divisors of `n_q_heads` that satisfy
   `active_q_heads % n_kv_heads == 0` (uniform per-KV-group).
+
+### NestedGQA + MoE (group-major heads + per-head expert routing)
+
+- K/V are dense per KV group (one `k_proj`/`v_proj`), broadcast to active heads
+  by **group-major tiling** (`repeat`): head `i` attends to group `i % n_kv`, so a
+  prefix `[:active_q]` takes the first `active_q // n_kv` heads of every group —
+  same uniform per-group rule as NestedGQA.
+- `q_experts`/`o_experts` are `(n_q, n_experts, ...)` tensors; head slicing is the
+  contiguous prefix `[:active_q]`. Per token, a per-head router picks `top-k`
+  experts and the gate-weighted average forms that head's effective Q (and O).
+- Sub-model axes: `active_q_heads` (prefix), `active_q_topk` (experts/head), and
+  `active_intermediate` (FFN), all independent.
+- **Memory vs compute**: all expert weights are resident at train time (slicing
+  saves compute/activations, not weight bytes). Weight memory shrinks only at
+  **export**: `model.gqa_moe_nested.extract_submodel_state(model, active_q_heads=…,
+  experts_per_head=…)` keeps the head prefix and prunes each kept head to its most
+  important experts (router-norm proxy), returning strictly smaller tensors.
 
 ### MatMLA (paper-faithful, MHA-on-decompressed-side)
 

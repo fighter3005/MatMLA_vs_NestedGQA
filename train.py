@@ -23,6 +23,7 @@ from data.wikitext import (
     vocab_size_gpt2,
 )
 from loss import lm_loss
+from model.gqa_moe_nested import collect_moe_aux_loss
 from model.factory import (
     SubModelSpec,
     build_model,
@@ -112,6 +113,7 @@ def evaluate(
             x,
             active_q_heads=submodel.active_q_heads,
             active_intermediate=submodel.active_intermediate,
+            active_q_topk=submodel.active_q_topk,
         )
         # Chunk over batch dim to avoid one giant log_softmax allocation.
         B = y.shape[0]
@@ -277,6 +279,7 @@ def main() -> None:
                     x,
                     active_q_heads=train_spec.active_q_heads,
                     active_intermediate=train_spec.active_intermediate,
+                    active_q_topk=train_spec.active_q_topk,
                 )
                 # Chunked cross-entropy to keep peak log_softmax buffer small.
                 # Per microbatch: log_softmax buffer ~ chunk * T * V * 4 bytes.
@@ -296,6 +299,9 @@ def main() -> None:
                     loss_sum = loss_sum + loss_chunk
                     n_tokens += yc.numel()
                 loss = loss_sum / max(1, n_tokens) / grad_accum
+                aux = collect_moe_aux_loss(model)
+                if aux is not None:
+                    loss = loss + aux / grad_accum
             scaler.scale(loss).backward()
             loss_accum += float((loss_sum / max(1, n_tokens)).item())
             n_tokens_total += n_tokens

@@ -13,6 +13,7 @@ from typing import Iterable, List, Optional, Sequence
 import torch.nn as nn
 
 from .baseline import build_baseline_gqa, build_baseline_mha
+from .gqa_moe_nested import build_gqa_moe_nested
 from .matmla import build_matmla
 from .nested_gqa import build_nested_gqa
 
@@ -22,13 +23,15 @@ class SubModelSpec:
     active_q_heads: Optional[int] = None       # None -> full
     active_kv_heads: Optional[int] = None      # None -> full
     active_intermediate: Optional[int] = None  # None -> full
+    active_q_topk: Optional[int] = None        # None -> full (MoE only)
 
     @property
     def tag(self) -> str:
         q = "full" if self.active_q_heads is None else f"q{self.active_q_heads}"
         kv = "" if self.active_kv_heads is None else f"_kv{self.active_kv_heads}"
         ffn = "" if self.active_intermediate is None else f"_ffn{self.active_intermediate}"
-        return f"{q}{kv}{ffn}"
+        topk = "" if self.active_q_topk is None else f"_k{self.active_q_topk}"
+        return f"{q}{kv}{ffn}{topk}"
 
     @property
     def is_full(self) -> bool:
@@ -36,6 +39,7 @@ class SubModelSpec:
             self.active_q_heads is None
             and self.active_kv_heads is None
             and self.active_intermediate is None
+            and self.active_q_topk is None
         )
 
 
@@ -73,6 +77,17 @@ def build_model(cfg: dict) -> nn.Module:
             n_kv_heads=m["n_kv_heads"],
             head_dim=m["head_dim"],
         )
+    if variant == "gqa_moe_nested":
+        return build_gqa_moe_nested(
+            **common,
+            n_q_heads=m["n_q_heads"],
+            n_kv_heads=m["n_kv_heads"],
+            head_dim=m["head_dim"],
+            n_experts=m["n_experts"],
+            moe_k=m.get("moe_k", 2),
+            selection_mode=m.get("selection_mode", "softmax"),
+            aux_loss_weight=m.get("aux_loss_weight", 1e-2),
+        )
     if variant == "matmla":
         # MatMLA is MHA-on-decompressed-side; n_kv_heads is structurally equal
         # to n_q_heads and is not passed.
@@ -98,6 +113,7 @@ def enumerate_submodels(cfg: dict) -> List[SubModelSpec]:
     gran = m.get("granularities", {})
     q_list: Sequence[int] = list(gran.get("q_heads", []))
     ffn_list: Sequence[Optional[int]] = list(gran.get("ffn_ratio", []))
+    topk_list: Sequence[Optional[int]] = list(gran.get("q_topk", []))
     # Convert FFN ratios to actual intermediate sizes (prefix slices).
     d_inter = int(m["d_intermediate"])
     ffn_dims: List[Optional[int]] = []
@@ -107,15 +123,33 @@ def enumerate_submodels(cfg: dict) -> List[SubModelSpec]:
         else:
             ffn_dims.append(max(1, int(round(d_inter * float(r)))))
 
+    # The top-k axis only exists for MoE variants. The "full" value is moe_k.
+    moe_k_full = int(m.get("moe_k", 0))
+    topk_vals: List[Optional[int]] = []
+    for tk in topk_list:
+        if tk is None or (moe_k_full and int(tk) == moe_k_full):
+            topk_vals.append(None)
+        else:
+            topk_vals.append(int(tk))
+    if not topk_vals:
+        topk_vals = [None]  # no top-k granularity configured
+
     specs: List[SubModelSpec] = []
     n_q_full = int(m.get("n_q_heads", m.get("n_heads", 0)))
     for q in q_list:
         for f in ffn_dims:
-            if q is None or q == n_q_full:
-                q_full = None
-            else:
-                q_full = int(q)
-            specs.append(SubModelSpec(active_q_heads=q_full, active_intermediate=f))
+            for tk in topk_vals:
+                if q is None or q == n_q_full:
+                    q_full = None
+                else:
+                    q_full = int(q)
+                specs.append(
+                    SubModelSpec(
+                        active_q_heads=q_full,
+                        active_intermediate=f,
+                        active_q_topk=tk,
+                    )
+                )
 
     # Always include the full sub-model last.
     specs.append(SubModelSpec())
@@ -162,7 +196,7 @@ def submodel_kv_size_bytes(cfg: dict, spec: SubModelSpec, dtype_bytes: int = 2) 
     variant = m["variant"]
     if variant == "matmla":
         per_layer = (int(m["c_kv"]) + int(m["r_rope"])) * dtype_bytes
-    elif variant in ("nested_gqa", "baseline_gqa", "baseline_mha"):
+    elif variant in ("nested_gqa", "gqa_moe_nested", "baseline_gqa", "baseline_mha"):
         n_kv = int(m.get("n_kv_heads", m.get("n_heads", 0)))
         head_dim = int(m["head_dim"])
         per_layer = (n_kv * head_dim * 2) * dtype_bytes  # K + V
